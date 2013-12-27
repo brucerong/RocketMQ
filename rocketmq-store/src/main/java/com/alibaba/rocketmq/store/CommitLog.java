@@ -484,7 +484,11 @@ public class CommitLog {
         if (tranType == MessageSysFlag.TransactionNotType//
                 || tranType == MessageSysFlag.TransactionCommitType) {
             // 延时投递
-            if (msg.getDelayTimeLevel() > 0) {
+        	if(msg.getDelayTime()>0&&this.defaultMessageStore.getMessageStoreConfig().isPreciseDelayTime()) {
+        		
+        		
+        		
+        	} else if (msg.getDelayTimeLevel() > 0) {
                 if (msg.getDelayTimeLevel() > this.defaultMessageStore.getScheduleMessageService()
                     .getMaxDelayLevel()) {
                     msg.setDelayTimeLevel(this.defaultMessageStore.getScheduleMessageService()

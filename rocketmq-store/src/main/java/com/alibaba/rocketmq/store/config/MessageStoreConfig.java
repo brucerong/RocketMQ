@@ -133,6 +133,7 @@ public class MessageStoreConfig {
     private int syncFlushTimeout = 1000 * 5;
     // 定时消息相关
     private String messageDelayLevel = "1s 5s 10s 30s 1m 2m 3m 4m 5m 6m 7m 8m 9m 10m 20m 30m";
+    private boolean preciseDelayTime = true;
     private long flushDelayOffsetInterval = 1000 * 10;
     private String delayOffsetStorePath = System.getProperty("user.home") + File.separator + "store"
             + File.separator + "config" + File.separator + "delayOffset.json";
@@ -715,4 +716,15 @@ public class MessageStoreConfig {
     public void setMessageIndexSafe(boolean messageIndexSafe) {
         this.messageIndexSafe = messageIndexSafe;
     }
+
+
+	public boolean isPreciseDelayTime() {
+		return preciseDelayTime;
+	}
+
+
+	public void setPreciseDelayTime(boolean preciseDelayTime) {
+		this.preciseDelayTime = preciseDelayTime;
+	}
+    
 }

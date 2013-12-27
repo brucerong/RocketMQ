@@ -32,6 +32,11 @@ public class MessageConst {
      * 消息延时投递时间级别，0表示不延时，大于0表示特定延时级别（具体级别在服务器端定义）
      */
     public static final String PROPERTY_DELAY_TIME_LEVEL = "DELAY";
+    
+    /**
+     * 消息延时投递时间
+     */
+    public static final String PROPERTY_DELAY_TIME = "DELAY_TIME";
 
     /**
      * 内部使用

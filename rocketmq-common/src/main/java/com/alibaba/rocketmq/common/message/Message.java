@@ -46,7 +46,7 @@ public class Message implements Serializable {
      * 消息体
      */
     private byte[] body;
-
+    
 
     public Message() {
     }
@@ -161,7 +161,18 @@ public class Message implements Serializable {
     public void setDelayTimeLevel(int level) {
         this.putProperty(MessageConst.PROPERTY_DELAY_TIME_LEVEL, String.valueOf(level));
     }
-
+    
+    public long getDelayTime() {
+    	String t = this.getProperty(MessageConst.PROPERTY_DELAY_TIME);
+        if (t != null) {
+            return Long.parseLong(t);
+        }
+        return 0;
+    }
+    
+    public void setDelayTime(long time) {
+    	this.putProperty(MessageConst.PROPERTY_DELAY_TIME, String.valueOf(time));
+    }
 
     public boolean isWaitStoreMsgOK() {
         String result = this.getProperty(MessageConst.PROPERTY_WAIT_STORE_MSG_OK);
