@@ -806,18 +806,28 @@ public class DefaultMessageStore implements MessageStore {
 
         ConsumeQueue logic = map.get(queueId);
         if (null == logic) {
-            ConsumeQueue newLogic = new ConsumeQueue(//
-                topic,//
-                queueId,//
-                this.getMessageStoreConfig().getStorePathConsumeQueue(),//
-                this.getMessageStoreConfig().getMapedFileSizeConsumeQueue(),//
-                this);
-            ConsumeQueue oldLogic = map.putIfAbsent(queueId, newLogic);
-            if (oldLogic != null) {
-                logic = oldLogic;
-            }
-            else {
-                logic = newLogic;
+            ConsumeQueue newLogic = null;
+            if(ScheduleMessageService.PRECISE_SCHEDULE_TOPIC.equals(topic)) {
+            	newLogic = new ScheduleConsumeQueue(//
+		                topic,//
+		                queueId,//
+		                this.getMessageStoreConfig().getStorePathConsumeQueue(),//
+		                this.getMessageStoreConfig().getMapedFileSizeConsumeQueue(),//
+		                this);
+            } else {
+            	newLogic = new ConsumeQueue(//
+                        topic,//
+                        queueId,//
+                        this.getMessageStoreConfig().getStorePathConsumeQueue(),//
+                        this.getMessageStoreConfig().getMapedFileSizeConsumeQueue(),//
+                        this);
+                ConsumeQueue oldLogic = map.putIfAbsent(queueId, newLogic);
+                if (oldLogic != null) {
+                    logic = oldLogic;
+                }
+                else {
+                    logic = newLogic;
+                }
             }
         }
 

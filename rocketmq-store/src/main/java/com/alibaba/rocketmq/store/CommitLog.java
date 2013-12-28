@@ -485,32 +485,29 @@ public class CommitLog {
                 || tranType == MessageSysFlag.TransactionCommitType) {
             // 延时投递
         	if(msg.getDelayTime()>0&&this.defaultMessageStore.getMessageStoreConfig().isPreciseDelayTime()) {
-        		
-        		
-        		
+        		topic = ScheduleMessageService.PRECISE_SCHEDULE_TOPIC;
+        		queueId = ScheduleMessageService.SCHEDULE_QUEUE_ID;
+        		tagsCode = this.defaultMessageStore.getScheduleMessageService().computePreciseDeliverTimestamp(
+                        msg.getDelayTimeLevel(), msg.getStoreTimestamp());
         	} else if (msg.getDelayTimeLevel() > 0) {
                 if (msg.getDelayTimeLevel() > this.defaultMessageStore.getScheduleMessageService()
                     .getMaxDelayLevel()) {
                     msg.setDelayTimeLevel(this.defaultMessageStore.getScheduleMessageService()
                         .getMaxDelayLevel());
                 }
-
                 topic = ScheduleMessageService.SCHEDULE_TOPIC;
                 queueId = ScheduleMessageService.delayLevel2QueueId(msg.getDelayTimeLevel());
                 tagsCode =
                         this.defaultMessageStore.getScheduleMessageService().computeDeliverTimestamp(
                             msg.getDelayTimeLevel(), msg.getStoreTimestamp());
 
-                /**
-                 * 备份真实的topic，queueId
-                 */
-                msg.putProperty(MessageConst.PROPERTY_REAL_TOPIC, msg.getTopic());
-                msg.putProperty(MessageConst.PROPERTY_REAL_QUEUE_ID, String.valueOf(msg.getQueueId()));
-                msg.setPropertiesString(MessageDecoder.messageProperties2String(msg.getProperties()));
-
-                msg.setTopic(topic);
-                msg.setQueueId(queueId);
             }
+        	msg.putProperty(MessageConst.PROPERTY_REAL_TOPIC, msg.getTopic());
+            msg.putProperty(MessageConst.PROPERTY_REAL_QUEUE_ID, String.valueOf(msg.getQueueId()));
+            msg.setPropertiesString(MessageDecoder.messageProperties2String(msg.getProperties()));
+
+            msg.setTopic(topic);
+            msg.setQueueId(queueId);
         }
 
         // 写文件要加锁

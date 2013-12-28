@@ -29,14 +29,33 @@ import com.alibaba.rocketmq.remoting.protocol.RemotingSerializable;
 public class DelayOffsetSerializeWrapper extends RemotingSerializable {
     private ConcurrentHashMap<Integer /* level */, Long/* offset */> offsetTable =
             new ConcurrentHashMap<Integer, Long>(32);
-
+    
+    private long[] processTimeTag;
+    
+    private long preciseTime;
 
     public ConcurrentHashMap<Integer, Long> getOffsetTable() {
         return offsetTable;
     }
 
-
     public void setOffsetTable(ConcurrentHashMap<Integer, Long> offsetTable) {
         this.offsetTable = offsetTable;
     }
+
+	public long[] getProcessTimeTag() {
+		return processTimeTag;
+	}
+
+	public void setProcessTimeTag(long[] processTimeTag) {
+		this.processTimeTag = processTimeTag;
+	}
+
+	public long getPreciseTime() {
+		return preciseTime;
+	}
+
+	public void setPreciseTime(long preciseTime) {
+		this.preciseTime = preciseTime;
+	}
+    
 }

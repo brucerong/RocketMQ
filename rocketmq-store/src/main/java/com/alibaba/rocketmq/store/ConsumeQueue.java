@@ -563,4 +563,10 @@ public class ConsumeQueue {
     public long getMaxOffsetInQuque() {
         return this.mapedFileQueue.getMaxOffset() / CQStoreUnitSize;
     }
+
+
+	public MapedFileQueue getMapedFileQueue() {
+		return mapedFileQueue;
+	}
+    
 }
