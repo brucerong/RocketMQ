@@ -15,10 +15,8 @@
  */
 package com.alibaba.rocketmq.store;
 
-import java.util.Calendar;
-import java.util.Date;
-import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,16 +39,20 @@ public class ScheduleConsumeQueue extends ConsumeQueue {
 	public static Integer UNLOAD = 0; //未加载到内存
 	public static Integer LOADING = 1; //加载中
 	public static Integer LOADED = 2; //加载内存操作完成
-	public static Integer DELETING = 3; //删除中
+	public static Integer DELETING = 3; //删除内存数据中
 	
-	public Integer status = UNLOAD;
+	private Integer status = UNLOAD;
 	
 	public long loadingOffsetFlag;
 	
 	// 内存存储
-    private final ConcurrentHashMap<Long, List<ScheduleMsgInfo>> scheduleMsgTable = 
-    		new ConcurrentHashMap<Long, List<ScheduleMsgInfo>>(1800);
+//    private final ConcurrentHashMap<Long, List<ScheduleMsgInfo>> scheduleMsgTable = 
+//    		new ConcurrentHashMap<Long, List<ScheduleMsgInfo>>(1800);
+    
+    private ConcurrentLinkedQueue<ScheduleMsgInfo>[] scheduleMsgTable = new ConcurrentLinkedQueue[600];
 
+    private AtomicBoolean[] isInProcessArr = new AtomicBoolean[600];
+    
     public ScheduleConsumeQueue(//
             final String topic,//
             final int queueId,//
@@ -62,21 +64,55 @@ public class ScheduleConsumeQueue extends ConsumeQueue {
 
 
     public boolean storageLoad() {
-    	//提前把List都new好，需要线程安全
+    	//提前把QUEUE都new好，需要线程安全
+    	for(int i=0;i<600;i++) {
+    		scheduleMsgTable[i] = new ConcurrentLinkedQueue<ScheduleMsgInfo>();
+    	}
     	status = LOADING;
-    	
-    	
+    	long offset = this.getDefaultMessageStore().getScheduleMessageService().getPreciseOffset(this.getQueueId());
+    	boolean flag = true;
+    	while(flag) {
+    		SelectMapedBufferResult bufferCQ = this.getIndexBuffer(offset);
+            if (bufferCQ != null) {
+                try {
+                    int i = 0;
+                    for (; i < bufferCQ.getSize(); i += ConsumeQueue.CQStoreUnitSize) {
+                        long offsetPy = bufferCQ.getByteBuffer().getLong();
+                        int sizePy = bufferCQ.getByteBuffer().getInt();
+                        long tagsCode = bufferCQ.getByteBuffer().getLong();
+                        if(offsetPy==loadingOffsetFlag) {
+                        	break;
+                        }
+                        ScheduleMsgInfo msg = new ScheduleMsgInfo();
+                        msg.setCommitOffset(offsetPy);
+                        msg.setSize(sizePy);
+                        int slot = ScheduleHelper.getSlotInQueue(tagsCode, this.getQueueId());
+                        this.addScheduleMsg(slot, msg);
+                    } // end of for
+                    offset = offset + (i / ConsumeQueue.CQStoreUnitSize);
+                }
+                finally {
+                    // 必须释放资源
+                    bufferCQ.release();
+                }
+            } else {
+            	flag = false;
+            }
+    	}
     	status = LOADED;
     	return true;
     }
 
-    public int deleteExpiredFile(long offset) {
-    	//
-        int cnt = super.deleteExpiredFile(offset);
-        return cnt;
+
+    public void addScheduleMsg(int slot, ScheduleMsgInfo msg) {
+    	ConcurrentLinkedQueue<ScheduleMsgInfo> scheduleQueue = scheduleMsgTable[slot];
+    	scheduleQueue.add(msg);
     }
-
-
+    
+    public ConcurrentLinkedQueue<ScheduleMsgInfo> getScheduleMsgs(int slot) {
+    	return this.scheduleMsgTable[slot];
+    }
+    
     public void putMessagePostionInfoWrapper(long offset, int size, long tagsCode, long storeTimestamp,
             long logicOffset) {
     	super.putMessagePostionInfoWrapper(offset, size, tagsCode, storeTimestamp, logicOffset);
@@ -89,17 +125,28 @@ public class ScheduleConsumeQueue extends ConsumeQueue {
 				}
     		}
     	}
+    	
     	if(status.equals(LOADING)||status.equals(LOADED)) {
     		ScheduleMsgInfo msg = new ScheduleMsgInfo();
         	msg.setCommitOffset(offset);
         	msg.setSize(size);
-        	long timeKey = ScheduleHelper.getTimeKey(tagsCode);
-        	List<ScheduleMsgInfo> scheduleList = scheduleMsgTable.get(timeKey);
-        	scheduleList.add(msg);
+        	int slot = ScheduleHelper.getSlotInQueue(tagsCode, this.getQueueId());
+        	this.putMessageInfoToStorage(slot, msg);
     	}
     	
     }
+    
+    public void putMessageInfoToStorage(int slot, ScheduleMsgInfo msg) {
+    	this.addScheduleMsg(slot, msg);
+    }
 
+    public long releaseStorage() {
+    	status = DELETING;
+    	long lastOffset = this.getLastOffset();
+    	scheduleMsgTable = new ConcurrentLinkedQueue[600];
+    	status = UNLOAD;
+    	return lastOffset;
+    }
 
 	public Integer getStatus() {
 		return status;
@@ -109,6 +156,11 @@ public class ScheduleConsumeQueue extends ConsumeQueue {
 	public void setStatus(Integer status) {
 		this.status = status;
 	}
-    
+
+
+	public AtomicBoolean getIsInProcess(int slot) {
+		return isInProcessArr[slot];
+	}
+
 
 }

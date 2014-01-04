@@ -147,6 +147,9 @@ public class ConsumeQueue {
     }
 
 
+    public DefaultMessageStore getDefaultMessageStore() {
+    	return this.defaultMessageStore;
+    }
     /**
      * 二分查找查找消息发送时间最接近timestamp逻辑队列的offset
      */

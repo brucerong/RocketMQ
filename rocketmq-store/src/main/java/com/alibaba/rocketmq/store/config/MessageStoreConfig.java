@@ -134,7 +134,6 @@ public class MessageStoreConfig {
     // 定时消息相关
     private String messageDelayLevel = "1s 5s 10s 30s 1m 2m 3m 4m 5m 6m 7m 8m 9m 10m 20m 30m";
     private boolean preciseDelayTime = true;
-    private boolean preciseDelaySchedule = true;
     private long flushDelayOffsetInterval = 1000 * 10;
     private String delayOffsetStorePath = System.getProperty("user.home") + File.separator + "store"
             + File.separator + "config" + File.separator + "delayOffset.json";
@@ -728,15 +727,5 @@ public class MessageStoreConfig {
 		this.preciseDelayTime = preciseDelayTime;
 	}
 
-
-	public boolean isPreciseDelaySchedule() {
-		return preciseDelaySchedule;
-	}
-
-
-	public void setPreciseDelaySchedule(boolean preciseDelaySchedule) {
-		this.preciseDelaySchedule = preciseDelaySchedule;
-	}
-	
     
 }

@@ -33,6 +33,9 @@ public class DelayOffsetSerializeWrapper extends RemotingSerializable {
     private long[] processTimeTag;
     
     private long preciseTime;
+    
+    private ConcurrentHashMap<Integer, Long>  preciseOffsetTable = 
+    		new ConcurrentHashMap<Integer, Long>();
 
     public ConcurrentHashMap<Integer, Long> getOffsetTable() {
         return offsetTable;
@@ -41,6 +44,15 @@ public class DelayOffsetSerializeWrapper extends RemotingSerializable {
     public void setOffsetTable(ConcurrentHashMap<Integer, Long> offsetTable) {
         this.offsetTable = offsetTable;
     }
+
+	public ConcurrentHashMap<Integer, Long> getPreciseOffsetTable() {
+		return preciseOffsetTable;
+	}
+
+	public void setPreciseOffsetTable(
+			ConcurrentHashMap<Integer, Long> preciseOffsetTable) {
+		this.preciseOffsetTable = preciseOffsetTable;
+	}
 
 	public long[] getProcessTimeTag() {
 		return processTimeTag;

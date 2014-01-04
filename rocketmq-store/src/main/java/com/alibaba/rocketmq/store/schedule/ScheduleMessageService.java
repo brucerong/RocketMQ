@@ -15,9 +15,6 @@
  */
 package com.alibaba.rocketmq.store.schedule;
 
-import java.util.ArrayList;
-import java.util.Calendar;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -25,6 +22,7 @@ import java.util.Map.Entry;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,7 +59,7 @@ public class ScheduleMessageService extends ConfigManager {
     private static final long FIRST_DELAY_TIME = 1000L;
     private static final long DELAY_FOR_A_WHILE = 100L;
     private static final long DELAY_FOR_A_PERIOD = 10000L;
-    private static final long SCHEDULE_PERIOD = 500L;
+    private static final long SCHEDULE_PERIOD = 200L;
     private static final long SCHEDULE_LOAD_STORAGE_PERIOD = 60*1000L; //一分钟一次查看未触发的定时
     private static final int PRECISE_SLOT_SIZE = 675;
     // 每个level对应的延时时间
@@ -70,6 +68,9 @@ public class ScheduleMessageService extends ConfigManager {
     // 延时计算到了哪里
     private final ConcurrentHashMap<Integer /* level */, Long/* offset */> offsetTable =
             new ConcurrentHashMap<Integer, Long>(32);
+    //准时队列到了哪里
+    private final ConcurrentHashMap<Integer /* time */, Long/* offset */> preciseOffsetTable =
+        new ConcurrentHashMap<Integer, Long>(144);
     // 内存存储
     private final ConcurrentHashMap<Long, List<ScheduleMsgInfo>> scheduleMsgTable = 
     		new ConcurrentHashMap<Long, List<ScheduleMsgInfo>>(32);
@@ -88,33 +89,14 @@ public class ScheduleMessageService extends ConfigManager {
         this.defaultMessageStore = defaultMessageStore;
     }
     
-    private long getTimeKey(long timestamp) {
-    	Date date = new Date(timestamp);
-    	Calendar c = Calendar.getInstance();
-    	c.set(date.getYear()+1900, date.getMonth(), date.getDate(), date.getHours(), date.getMinutes(), date.getSeconds());
-    	return c.getTimeInMillis();
+    private void processPreciseTag(int queue, int slot) {
+    	long secondOfDay = queue*60*10 + slot;
+    	int arrSlot = (int)secondOfDay / PRECISE_SLOT_SIZE;
+    	int bitSlot = 8 - (int)secondOfDay % PRECISE_SLOT_SIZE;
+    	processTimeTag[arrSlot] = processTimeTag[arrSlot]|(1<<(bitSlot-1));
+    	preciseTime = secondOfDay;
     }
     
-    public void setScheduleMsg(long timestamp, ScheduleMsgInfo msg) {
-    	long timeKey = this.getTimeKey(timestamp);
-    	List<ScheduleMsgInfo> msgList = scheduleMsgTable.get(timeKey);
-    	if(msgList==null) {
-    		msgList = new ArrayList<ScheduleMsgInfo>();
-    		scheduleMsgTable.put(timeKey, msgList);
-    	}
-    	msgList.add(msg);
-    }
-    
-    public void deleteExpireScheduleMsgs() {
-    	long timeKey = this.getTimeKey(System.currentTimeMillis());
-    	long startKey = timeKey - 10*1000;
-    	while(scheduleMsgTable.keySet().contains(startKey)) {
-    		scheduleMsgTable.remove(startKey);
-    		startKey = startKey - 1000;
-    	}
-    }
-
-
     public void buildRunningStats(HashMap<String, String> stats) {
         Iterator<Entry<Integer, Long>> it = this.offsetTable.entrySet().iterator();
         while (it.hasNext()) {
@@ -158,6 +140,9 @@ public class ScheduleMessageService extends ConfigManager {
         return storeTimestamp + deplayTime;
     }
 
+    public long getPreciseOffset(int queueId) {
+    	return preciseOffsetTable.get(queueId)==null?0:preciseOffsetTable.get(queueId);
+    }
 
     public void start() {
         // 为每个延时队列增加定时器
@@ -173,9 +158,12 @@ public class ScheduleMessageService extends ConfigManager {
             }
         }
         
-        //为准时队列增加定时器
-        this.timer.scheduleAtFixedRate(new DeliverPreciseMessageTimerTask(0), 200, SCHEDULE_PERIOD);
-
+        //为准时队列增加定时器(10个定时器，防止1S内的消息处理时间大于1S的情况发生)
+        int count = 10;
+        while(count-->0) {
+        	this.timer.scheduleAtFixedRate(new DeliverPreciseScheduleMessageTask(0, 0), 200, SCHEDULE_PERIOD);
+        }
+        
         //准时队列内存加载定时器(5分钟前开始加载内存)
         this.timer.scheduleAtFixedRate(new LoadStorageTask(), 200, SCHEDULE_LOAD_STORAGE_PERIOD);
         // 定时将延时进度刷盘
@@ -212,6 +200,7 @@ public class ScheduleMessageService extends ConfigManager {
     public String encode(final boolean prettyFormat) {
         DelayOffsetSerializeWrapper delayOffsetSerializeWrapper = new DelayOffsetSerializeWrapper();
         delayOffsetSerializeWrapper.setOffsetTable(this.offsetTable);
+        delayOffsetSerializeWrapper.setPreciseOffsetTable(this.preciseOffsetTable);
         delayOffsetSerializeWrapper.setPreciseTime(preciseTime);
         delayOffsetSerializeWrapper.setProcessTimeTag(processTimeTag);
         return delayOffsetSerializeWrapper.toJson(prettyFormat);
@@ -238,6 +227,15 @@ public class ScheduleMessageService extends ConfigManager {
 
     public boolean load() {
         boolean result = super.load();
+        int queueId = ScheduleHelper.getQueueId(System.currentTimeMillis());
+        ScheduleConsumeQueue queue = (ScheduleConsumeQueue)defaultMessageStore.findConsumeQueue(SCHEDULE_TOPIC, queueId);
+		if(queue.getStatus().equals(ScheduleConsumeQueue.UNLOAD)) {
+			result = result&&queue.storageLoad();
+		}
+		ScheduleConsumeQueue queue2 = (ScheduleConsumeQueue)defaultMessageStore.findConsumeQueue(SCHEDULE_TOPIC, (queueId+1)%144);
+		if(queue2.getStatus().equals(ScheduleConsumeQueue.UNLOAD)) {
+			result = result&&queue2.storageLoad();
+		}
         result = result && this.parseDelayLevel();
         return result;
     }
@@ -300,12 +298,15 @@ public class ScheduleMessageService extends ConfigManager {
     	}
     }
     
-    class DeliverPreciseMessageTimerTask extends TimerTask {
+    class DeliverPreciseScheduleMessageTask extends TimerTask {
 
-    	private long time;
+    	private int queueId;
     	
-    	public DeliverPreciseMessageTimerTask(long time) {
-    		this.time = ScheduleMessageService.this.getTimeKey(time);
+    	private int slot;
+    	
+    	public DeliverPreciseScheduleMessageTask(int queueId, int slot) {
+    		this.queueId = queueId;
+    		this.slot = slot;
         }
 
         @Override
@@ -315,53 +316,56 @@ public class ScheduleMessageService extends ConfigManager {
             }
             catch (Exception e) {
                 log.error("executePreciseOnTimeup exception", e);
-                ScheduleMessageService.this.timer.schedule(new DeliverPreciseMessageTimerTask(time), DELAY_FOR_A_PERIOD);
+                ScheduleMessageService.this.timer.schedule(new DeliverPreciseScheduleMessageTask(queueId, slot), SCHEDULE_PERIOD);
             }
         }
 
 
         private void executePreciseOnTimeup() {
-        	long timestamp = ScheduleMessageService.this.getTimeKey(System.currentTimeMillis());
-        	if(time!=0) {
-        		timestamp = time;
+        	long timestamp = System.currentTimeMillis();
+        	int queueId = ScheduleHelper.getQueueId(timestamp);
+        	int slot = ScheduleHelper.getSlotInQueue(timestamp, queueId);
+        	if(this.queueId!=0) {
+        		queueId = this.queueId;
+        		slot = this.slot;
         	}
-        	List<ScheduleMsgInfo> infoList = ScheduleMessageService.this.scheduleMsgTable.get(timestamp);
-        	if(infoList!=null) {
-        		for(ScheduleMsgInfo info:infoList) {
-        			long offsetPy = info.getCommitOffset();
-                    int sizePy = info.getSize();
-                    MessageExt msgExt =
-                        ScheduleMessageService.this.defaultMessageStore.lookMessageByOffset(
-                            offsetPy, sizePy);
-	                if (msgExt != null) {
-	                    MessageExtBrokerInner msgInner = messageTimeup(msgExt);
-	                    PutMessageResult putMessageResult =
-	                            ScheduleMessageService.this.defaultMessageStore
-	                                .putMessage(msgInner);
-	                    // 成功
-	                    if (putMessageResult != null
-	                            && putMessageResult.getPutMessageStatus() == PutMessageStatus.PUT_OK) {
-	                        continue;
-	                    } else {
-	                    	defaultMessageStore.putMessagePostionInfo(PRECISE_SCHEDULE_TOPIC, SCHEDULE_QUEUE_ID, offsetPy, sizePy, System.currentTimeMillis()+1500, System.currentTimeMillis(), 0);
-	                    }
-	        		}
+        	ScheduleConsumeQueue queue = (ScheduleConsumeQueue)ScheduleMessageService.this.defaultMessageStore.findConsumeQueue(PRECISE_SCHEDULE_TOPIC, queueId);
+        	if(queue!=null) {
+        		if(!queue.getIsInProcess(slot).get()) {
+        			boolean oldValue = queue.getIsInProcess(slot).getAndSet(true);
+        			if(!oldValue) {
+        				ConcurrentLinkedQueue<ScheduleMsgInfo> msgQueue = queue.getScheduleMsgs(slot);
+                		ScheduleMsgInfo msg = msgQueue.poll();
+                		while(msg!=null) {
+                			long commitOffset = msg.getCommitOffset();
+                			int size = msg.getSize();
+                			MessageExt msgExt = ScheduleMessageService.this.defaultMessageStore.lookMessageByOffset(
+                					commitOffset, size);
+        	                if (msgExt != null) {
+        	                    MessageExtBrokerInner msgInner = messageTimeup(msgExt);
+        	                    PutMessageResult putMessageResult =
+        	                            ScheduleMessageService.this.defaultMessageStore
+        	                                .putMessage(msgInner);
+        	                    boolean isSuccess = putMessageResult != null && putMessageResult.getPutMessageStatus() == PutMessageStatus.PUT_OK;
+        	                    if(!isSuccess) {
+        	                    	msgQueue.add(msg);
+        	                    }
+        	                }
+                			msg = msgQueue.poll();
+                		}
+                		if(slot==599) {
+                			long lastOffset = queue.releaseStorage();
+                    		preciseOffsetTable.put(queue.getQueueId(), lastOffset);
+                		}
+        			}
         		}
         	}
-        	this.processPreciseTag(time);
         	
         }
         
-        private void processPreciseTag(long time) {
-        	Date date = new Date(time);
-        	long secondOfDay = date.getHours()*3600+date.getMinutes()*60+date.getSeconds();
-        	int slot = (int)secondOfDay / PRECISE_SLOT_SIZE;
-        	int bitSlot = 8 - (int)secondOfDay % PRECISE_SLOT_SIZE;
-        	processTimeTag[slot] = processTimeTag[slot]|(1<<(bitSlot-1));
-        	preciseTime = time;
-        }
-        
     }
+    
+
     
     class DeliverDelayedMessageTimerTask extends TimerTask {
         private final int delayLevel;

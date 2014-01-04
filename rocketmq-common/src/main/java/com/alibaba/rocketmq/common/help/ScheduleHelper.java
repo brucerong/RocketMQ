@@ -19,4 +19,15 @@ public class ScheduleHelper {
     	int minute = c.get(Calendar.MINUTE);
     	return (hour*60+minute)/10;
     }
+    
+    public static int getSlotInQueue(long timestamp, int queue) {
+    	int queueSecond = queue*10*60;
+    	Calendar c = Calendar.getInstance();
+    	c.setTimeInMillis(timestamp);
+    	int hour = c.get(Calendar.HOUR_OF_DAY);
+    	int minute = c.get(Calendar.MINUTE);
+    	int second = c.get(Calendar.SECOND);
+    	return hour*3600+minute*60+second - queueSecond;
+    	
+    }
 }

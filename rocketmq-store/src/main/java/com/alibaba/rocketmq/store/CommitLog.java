@@ -489,11 +489,7 @@ public class CommitLog {
         		topic = ScheduleMessageService.PRECISE_SCHEDULE_TOPIC;
         		tagsCode = this.defaultMessageStore.getScheduleMessageService().computePreciseDeliverTimestamp(
                         msg.getDelayTime(), msg.getStoreTimestamp());
-        		if(defaultMessageStore.getMessageStoreConfig().isPreciseDelaySchedule()) {
-        			queueId = ScheduleHelper.getQueueId(tagsCode);
-        		} else {
-            		queueId = ScheduleMessageService.SCHEDULE_QUEUE_ID;
-        		}
+        		queueId = ScheduleHelper.getQueueId(tagsCode);
         	} else if (msg.getDelayTimeLevel() > 0) {
                 if (msg.getDelayTimeLevel() > this.defaultMessageStore.getScheduleMessageService()
                     .getMaxDelayLevel()) {

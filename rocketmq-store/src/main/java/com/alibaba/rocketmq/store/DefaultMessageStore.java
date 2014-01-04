@@ -808,21 +808,12 @@ public class DefaultMessageStore implements MessageStore {
         if (null == logic) {
             ConsumeQueue newLogic = null;
             if(ScheduleMessageService.PRECISE_SCHEDULE_TOPIC.equals(topic)) {
-            	if(this.getMessageStoreConfig().isPreciseDelaySchedule()) {
-            		newLogic = new ScheduleConsumeQueue(//
-    		                topic,//
-    		                queueId,//
-    		                this.getMessageStoreConfig().getStorePathConsumeQueue(),//
-    		                this.getMessageStoreConfig().getMapedFileSizeConsumeQueue(),//
-    		                this);
-            	} else {
-            		newLogic = new TimerConsumeQueue(//
-    		                topic,//
-    		                queueId,//
-    		                this.getMessageStoreConfig().getStorePathConsumeQueue(),//
-    		                this.getMessageStoreConfig().getMapedFileSizeConsumeQueue(),//
-    		                this);
-            	}
+        		newLogic = new ScheduleConsumeQueue(//
+		                topic,//
+		                queueId,//
+		                this.getMessageStoreConfig().getStorePathConsumeQueue(),//
+		                this.getMessageStoreConfig().getMapedFileSizeConsumeQueue(),//
+		                this);
             	
             } else {
             	newLogic = new ConsumeQueue(//
@@ -926,12 +917,23 @@ public class DefaultMessageStore implements MessageStore {
                 if (fileQueueIdList != null) {
                     for (File fileQueueId : fileQueueIdList) {
                         int queueId = Integer.parseInt(fileQueueId.getName());
-                        ConsumeQueue logic = new ConsumeQueue(//
-                            topic,//
-                            queueId,//
-                            this.getMessageStoreConfig().getStorePathConsumeQueue(),//
-                            this.getMessageStoreConfig().getMapedFileSizeConsumeQueue(),//
-                            this);
+                        ConsumeQueue logic = null;
+                        if(ScheduleMessageService.PRECISE_SCHEDULE_TOPIC.equals(topic)) {
+                        	logic = new ScheduleConsumeQueue(//
+                                    topic,//
+                                    queueId,//
+                                    this.getMessageStoreConfig().getStorePathConsumeQueue(),//
+                                    this.getMessageStoreConfig().getMapedFileSizeConsumeQueue(),//
+                                    this);
+                        } else {
+                        	logic = new ConsumeQueue(//
+                                    topic,//
+                                    queueId,//
+                                    this.getMessageStoreConfig().getStorePathConsumeQueue(),//
+                                    this.getMessageStoreConfig().getMapedFileSizeConsumeQueue(),//
+                                    this);
+                        }
+                        
                         this.putConsumeQueue(topic, queueId, logic);
                         if (!logic.load()) {
                             return false;
