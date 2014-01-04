@@ -71,9 +71,6 @@ public class ScheduleMessageService extends ConfigManager {
     //准时队列到了哪里
     private final ConcurrentHashMap<Integer /* time */, Long/* offset */> preciseOffsetTable =
         new ConcurrentHashMap<Integer, Long>(144);
-    // 内存存储
-    private final ConcurrentHashMap<Long, List<ScheduleMsgInfo>> scheduleMsgTable = 
-    		new ConcurrentHashMap<Long, List<ScheduleMsgInfo>>(32);
     // 定时器
     private final Timer timer = new Timer("ScheduleMessageTimerThread", true);
     // 存储顶层对象
@@ -353,6 +350,7 @@ public class ScheduleMessageService extends ConfigManager {
         	                }
                 			msg = msgQueue.poll();
                 		}
+                		processPreciseTag(queue.getQueueId(), slot);
                 		if(slot==599) {
                 			long lastOffset = queue.releaseStorage();
                     		preciseOffsetTable.put(queue.getQueueId(), lastOffset);
