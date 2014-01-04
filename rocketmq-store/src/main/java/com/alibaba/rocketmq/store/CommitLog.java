@@ -30,6 +30,7 @@ import org.slf4j.LoggerFactory;
 import com.alibaba.rocketmq.common.ServiceThread;
 import com.alibaba.rocketmq.common.UtilAll;
 import com.alibaba.rocketmq.common.constant.LoggerName;
+import com.alibaba.rocketmq.common.help.ScheduleHelper;
 import com.alibaba.rocketmq.common.message.MessageConst;
 import com.alibaba.rocketmq.common.message.MessageDecoder;
 import com.alibaba.rocketmq.common.message.MessageExt;
@@ -486,9 +487,13 @@ public class CommitLog {
             // 延时投递
         	if(msg.getDelayTime()>0&&this.defaultMessageStore.getMessageStoreConfig().isPreciseDelayTime()) {
         		topic = ScheduleMessageService.PRECISE_SCHEDULE_TOPIC;
-        		queueId = ScheduleMessageService.SCHEDULE_QUEUE_ID;
         		tagsCode = this.defaultMessageStore.getScheduleMessageService().computePreciseDeliverTimestamp(
-                        msg.getDelayTimeLevel(), msg.getStoreTimestamp());
+                        msg.getDelayTime(), msg.getStoreTimestamp());
+        		if(defaultMessageStore.getMessageStoreConfig().isPreciseDelaySchedule()) {
+        			queueId = ScheduleHelper.getQueueId(tagsCode);
+        		} else {
+            		queueId = ScheduleMessageService.SCHEDULE_QUEUE_ID;
+        		}
         	} else if (msg.getDelayTimeLevel() > 0) {
                 if (msg.getDelayTimeLevel() > this.defaultMessageStore.getScheduleMessageService()
                     .getMaxDelayLevel()) {

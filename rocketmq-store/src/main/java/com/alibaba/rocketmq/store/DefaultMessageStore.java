@@ -808,12 +808,22 @@ public class DefaultMessageStore implements MessageStore {
         if (null == logic) {
             ConsumeQueue newLogic = null;
             if(ScheduleMessageService.PRECISE_SCHEDULE_TOPIC.equals(topic)) {
-            	newLogic = new ScheduleConsumeQueue(//
-		                topic,//
-		                queueId,//
-		                this.getMessageStoreConfig().getStorePathConsumeQueue(),//
-		                this.getMessageStoreConfig().getMapedFileSizeConsumeQueue(),//
-		                this);
+            	if(this.getMessageStoreConfig().isPreciseDelaySchedule()) {
+            		newLogic = new ScheduleConsumeQueue(//
+    		                topic,//
+    		                queueId,//
+    		                this.getMessageStoreConfig().getStorePathConsumeQueue(),//
+    		                this.getMessageStoreConfig().getMapedFileSizeConsumeQueue(),//
+    		                this);
+            	} else {
+            		newLogic = new TimerConsumeQueue(//
+    		                topic,//
+    		                queueId,//
+    		                this.getMessageStoreConfig().getStorePathConsumeQueue(),//
+    		                this.getMessageStoreConfig().getMapedFileSizeConsumeQueue(),//
+    		                this);
+            	}
+            	
             } else {
             	newLogic = new ConsumeQueue(//
                         topic,//

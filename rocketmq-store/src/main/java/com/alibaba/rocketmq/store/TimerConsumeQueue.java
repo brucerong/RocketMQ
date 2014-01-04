@@ -15,17 +15,12 @@
  */
 package com.alibaba.rocketmq.store;
 
-import java.util.Calendar;
-import java.util.Date;
-import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import com.alibaba.rocketmq.common.constant.LoggerName;
-import com.alibaba.rocketmq.common.help.ScheduleHelper;
 import com.alibaba.rocketmq.common.message.ScheduleMsgInfo;
+import com.alibaba.rocketmq.store.schedule.ScheduleMessageService;
 
 
 /**
@@ -34,45 +29,31 @@ import com.alibaba.rocketmq.common.message.ScheduleMsgInfo;
  * @author guanghao.rb
  * @since 2013-7-21
  */
-public class ScheduleConsumeQueue extends ConsumeQueue {
+public class TimerConsumeQueue extends ConsumeQueue {
 
 	private static final Logger log = LoggerFactory.getLogger(LoggerName.StoreLoggerName);
 	
-	public static Integer UNLOAD = 0; //未加载到内存
-	public static Integer LOADING = 1; //加载中
-	public static Integer LOADED = 2; //加载内存操作完成
-	public static Integer DELETING = 3; //删除中
-	
-	public Integer status = UNLOAD;
-	
-	public long loadingOffsetFlag;
-	
-	// 内存存储
-    private final ConcurrentHashMap<Long, List<ScheduleMsgInfo>> scheduleMsgTable = 
-    		new ConcurrentHashMap<Long, List<ScheduleMsgInfo>>(1800);
+	private ScheduleMessageService scheduleMessageService;
 
-    public ScheduleConsumeQueue(//
+    public TimerConsumeQueue(//
             final String topic,//
             final int queueId,//
             final String storePath,//
             final int mapedFileSize,//
             final DefaultMessageStore defaultMessageStore) {
        super(topic, queueId, storePath, mapedFileSize, defaultMessageStore);
+       scheduleMessageService = defaultMessageStore.getScheduleMessageService();
     }
 
 
-    public boolean storageLoad() {
-    	//提前把List都new好，需要线程安全
-    	status = LOADING;
-    	
-    	
-    	status = LOADED;
-    	return true;
+    public boolean load() {
+        boolean result = this.getMapedFileQueue().load();
+        return result;
     }
 
     public int deleteExpiredFile(long offset) {
-    	//
         int cnt = super.deleteExpiredFile(offset);
+        scheduleMessageService.deleteExpireScheduleMsgs();
         return cnt;
     }
 
@@ -80,35 +61,10 @@ public class ScheduleConsumeQueue extends ConsumeQueue {
     public void putMessagePostionInfoWrapper(long offset, int size, long tagsCode, long storeTimestamp,
             long logicOffset) {
     	super.putMessagePostionInfoWrapper(offset, size, tagsCode, storeTimestamp, logicOffset);
-    	if(status.equals(LOADING)) {
-    		if(loadingOffsetFlag==0) {
-    			synchronized (LOADED) {
-					if(loadingOffsetFlag==0) {
-						loadingOffsetFlag = logicOffset;
-					}
-				}
-    		}
-    	}
-    	if(status.equals(LOADING)||status.equals(LOADED)) {
-    		ScheduleMsgInfo msg = new ScheduleMsgInfo();
-        	msg.setCommitOffset(offset);
-        	msg.setSize(size);
-        	long timeKey = ScheduleHelper.getTimeKey(tagsCode);
-        	List<ScheduleMsgInfo> scheduleList = scheduleMsgTable.get(timeKey);
-        	scheduleList.add(msg);
-    	}
-    	
+    	ScheduleMsgInfo msg = new ScheduleMsgInfo();
+    	msg.setCommitOffset(offset);
+    	msg.setSize(size);
+    	scheduleMessageService.setScheduleMsg(tagsCode, msg);
     }
-
-
-	public Integer getStatus() {
-		return status;
-	}
-
-
-	public void setStatus(Integer status) {
-		this.status = status;
-	}
-    
 
 }

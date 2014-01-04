@@ -32,6 +32,7 @@ import org.slf4j.LoggerFactory;
 import com.alibaba.rocketmq.common.ConfigManager;
 import com.alibaba.rocketmq.common.TopicFilterType;
 import com.alibaba.rocketmq.common.constant.LoggerName;
+import com.alibaba.rocketmq.common.help.ScheduleHelper;
 import com.alibaba.rocketmq.common.message.MessageConst;
 import com.alibaba.rocketmq.common.message.MessageDecoder;
 import com.alibaba.rocketmq.common.message.MessageExt;
@@ -42,6 +43,7 @@ import com.alibaba.rocketmq.store.DefaultMessageStore;
 import com.alibaba.rocketmq.store.MessageExtBrokerInner;
 import com.alibaba.rocketmq.store.PutMessageResult;
 import com.alibaba.rocketmq.store.PutMessageStatus;
+import com.alibaba.rocketmq.store.ScheduleConsumeQueue;
 import com.alibaba.rocketmq.store.SelectMapedBufferResult;
 
 
@@ -60,6 +62,7 @@ public class ScheduleMessageService extends ConfigManager {
     private static final long DELAY_FOR_A_WHILE = 100L;
     private static final long DELAY_FOR_A_PERIOD = 10000L;
     private static final long SCHEDULE_PERIOD = 500L;
+    private static final long SCHEDULE_LOAD_STORAGE_PERIOD = 60*1000L; //一分钟一次查看未触发的定时
     private static final int PRECISE_SLOT_SIZE = 675;
     // 每个level对应的延时时间
     private final ConcurrentHashMap<Integer /* level */, Long/* delay timeMillis */> delayLevelTable =
@@ -173,6 +176,8 @@ public class ScheduleMessageService extends ConfigManager {
         //为准时队列增加定时器
         this.timer.scheduleAtFixedRate(new DeliverPreciseMessageTimerTask(0), 200, SCHEDULE_PERIOD);
 
+        //准时队列内存加载定时器(5分钟前开始加载内存)
+        this.timer.scheduleAtFixedRate(new LoadStorageTask(), 200, SCHEDULE_LOAD_STORAGE_PERIOD);
         // 定时将延时进度刷盘
         this.timer.scheduleAtFixedRate(new TimerTask() {
 
@@ -271,6 +276,30 @@ public class ScheduleMessageService extends ConfigManager {
         return true;
     }
 
+    class LoadStorageTask extends TimerTask {
+    	@Override
+        public void run() {
+            try {
+                this.executeStorageLoader();
+            }
+            catch (Exception e) {
+                log.error("executePreciseOnTimeup exception", e);
+                ScheduleMessageService.this.timer.schedule(new LoadStorageTask(), DELAY_FOR_A_PERIOD);
+            }
+        }
+    	
+    	private void executeStorageLoader() {
+    		int queueId = ScheduleHelper.getQueueId(System.currentTimeMillis()+5*60*1000);
+    		ScheduleConsumeQueue queue = (ScheduleConsumeQueue)defaultMessageStore.findConsumeQueue(SCHEDULE_TOPIC, queueId);
+    		if(queue.getStatus().equals(ScheduleConsumeQueue.UNLOAD)) {
+    			boolean result = queue.storageLoad();
+    			if(!result) {
+                    ScheduleMessageService.this.timer.schedule(new LoadStorageTask(), DELAY_FOR_A_PERIOD);
+    			}
+    		}
+    	}
+    }
+    
     class DeliverPreciseMessageTimerTask extends TimerTask {
 
     	private long time;
