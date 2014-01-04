@@ -228,11 +228,11 @@ public class ScheduleMessageService extends ConfigManager {
     public boolean load() {
         boolean result = super.load();
         int queueId = ScheduleHelper.getQueueId(System.currentTimeMillis());
-        ScheduleConsumeQueue queue = (ScheduleConsumeQueue)defaultMessageStore.findConsumeQueue(SCHEDULE_TOPIC, queueId);
+        ScheduleConsumeQueue queue = (ScheduleConsumeQueue)defaultMessageStore.findConsumeQueue(PRECISE_SCHEDULE_TOPIC, queueId);
 		if(queue.getStatus().equals(ScheduleConsumeQueue.UNLOAD)) {
 			result = result&&queue.storageLoad();
 		}
-		ScheduleConsumeQueue queue2 = (ScheduleConsumeQueue)defaultMessageStore.findConsumeQueue(SCHEDULE_TOPIC, (queueId+1)%144);
+		ScheduleConsumeQueue queue2 = (ScheduleConsumeQueue)defaultMessageStore.findConsumeQueue(PRECISE_SCHEDULE_TOPIC, (queueId+1)%144);
 		if(queue2.getStatus().equals(ScheduleConsumeQueue.UNLOAD)) {
 			result = result&&queue2.storageLoad();
 		}
@@ -288,7 +288,7 @@ public class ScheduleMessageService extends ConfigManager {
     	
     	private void executeStorageLoader() {
     		int queueId = ScheduleHelper.getQueueId(System.currentTimeMillis()+5*60*1000);
-    		ScheduleConsumeQueue queue = (ScheduleConsumeQueue)defaultMessageStore.findConsumeQueue(SCHEDULE_TOPIC, queueId);
+    		ScheduleConsumeQueue queue = (ScheduleConsumeQueue)defaultMessageStore.findConsumeQueue(PRECISE_SCHEDULE_TOPIC, queueId);
     		if(queue.getStatus().equals(ScheduleConsumeQueue.UNLOAD)) {
     			boolean result = queue.storageLoad();
     			if(!result) {
