@@ -143,6 +143,7 @@ public class ScheduleConsumeQueue extends ConsumeQueue {
     public long releaseStorage() {
     	status = DELETING;
     	long lastOffset = this.getLastOffset();
+    	loadingOffsetFlag = 0;
     	scheduleMsgTable = new ConcurrentLinkedQueue[600];
     	status = UNLOAD;
     	return lastOffset;
@@ -160,6 +161,10 @@ public class ScheduleConsumeQueue extends ConsumeQueue {
 
 	public AtomicBoolean getIsInProcess(int slot) {
 		return isInProcessArr[slot];
+	}
+	
+	public void setInProcess(int slot, boolean inProcess) {
+		isInProcessArr[slot].set(inProcess);
 	}
 
 

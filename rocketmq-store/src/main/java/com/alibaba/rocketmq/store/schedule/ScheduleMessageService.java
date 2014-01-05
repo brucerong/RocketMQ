@@ -17,7 +17,6 @@ package com.alibaba.rocketmq.store.schedule;
 
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map.Entry;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -327,7 +326,7 @@ public class ScheduleMessageService extends ConfigManager {
         		slot = this.slot;
         	}
         	ScheduleConsumeQueue queue = (ScheduleConsumeQueue)ScheduleMessageService.this.defaultMessageStore.findConsumeQueue(PRECISE_SCHEDULE_TOPIC, queueId);
-        	if(queue!=null) {
+        	if(queue!=null&&(queue.equals(ScheduleConsumeQueue.LOADING)||queue.equals(ScheduleConsumeQueue.UNLOAD))) {
         		if(!queue.getIsInProcess(slot).get()) {
         			boolean oldValue = queue.getIsInProcess(slot).getAndSet(true);
         			if(!oldValue) {
@@ -350,6 +349,7 @@ public class ScheduleMessageService extends ConfigManager {
         	                }
                 			msg = msgQueue.poll();
                 		}
+                		queue.setInProcess(slot, false);
                 		processPreciseTag(queue.getQueueId(), slot);
                 		if(slot==599) {
                 			long lastOffset = queue.releaseStorage();
