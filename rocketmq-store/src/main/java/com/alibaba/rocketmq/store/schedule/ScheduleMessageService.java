@@ -277,16 +277,19 @@ public class ScheduleMessageService extends ConfigManager {
                 this.executeStorageLoader();
             }
             catch (Exception e) {
-                log.error("executePreciseOnTimeup exception", e);
+                log.error("executeStorageLoader exception", e);
                 ScheduleMessageService.this.timer.schedule(new LoadStorageTask(), DELAY_FOR_A_PERIOD);
             }
         }
     	
     	private void executeStorageLoader() {
     		int queueId = ScheduleHelper.getQueueId(System.currentTimeMillis()+5*60*1000);
+        	log.info("come into LoadStorageTask:---queueId="+queueId);
     		ScheduleConsumeQueue queue = (ScheduleConsumeQueue)defaultMessageStore.findConsumeQueue(PRECISE_SCHEDULE_TOPIC, queueId);
+    		log.info("come into LoadStorageTask:---queueStatus="+queue.getStatus());
     		if(queue.getStatus().equals(ScheduleConsumeQueue.UNLOAD)) {
     			boolean result = queue.storageLoad();
+    			log.info("come into LoadStorageTask:---result="+result);
     			if(!result) {
                     ScheduleMessageService.this.timer.schedule(new LoadStorageTask(), DELAY_FOR_A_PERIOD);
     			}
@@ -325,12 +328,17 @@ public class ScheduleMessageService extends ConfigManager {
         		queueId = this.queueId;
         		slot = this.slot;
         	}
+        	log.info("come into DeliverPreciseScheduleMessageTask:---queueId="+queueId+"---slot="+slot+"---time="+timestamp);
         	ScheduleConsumeQueue queue = (ScheduleConsumeQueue)ScheduleMessageService.this.defaultMessageStore.findConsumeQueue(PRECISE_SCHEDULE_TOPIC, queueId);
+    		log.info("come into DeliverPreciseScheduleMessageTask:---queueStatus="+queue.getStatus());
         	if(queue!=null&&(queue.equals(ScheduleConsumeQueue.LOADING)||queue.equals(ScheduleConsumeQueue.UNLOAD))) {
+        		log.info("come into DeliverPreciseScheduleMessageTask:---1IsInProcess="+queue.getIsInProcess(slot).get());
         		if(!queue.getIsInProcess(slot).get()) {
         			boolean oldValue = queue.getIsInProcess(slot).getAndSet(true);
+            		log.info("come into DeliverPreciseScheduleMessageTask:---1IsInProcessOldValue="+oldValue);
         			if(!oldValue) {
         				ConcurrentLinkedQueue<ScheduleMsgInfo> msgQueue = queue.getScheduleMsgs(slot);
+                		log.info("come into DeliverPreciseScheduleMessageTask:---msgQueue="+msgQueue.size());
                 		ScheduleMsgInfo msg = msgQueue.poll();
                 		while(msg!=null) {
                 			long commitOffset = msg.getCommitOffset();
