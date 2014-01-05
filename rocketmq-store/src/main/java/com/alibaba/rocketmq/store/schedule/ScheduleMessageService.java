@@ -51,96 +51,100 @@ import com.alibaba.rocketmq.store.SelectMapedBufferResult;
  * @since 2013-7-21
  */
 public class ScheduleMessageService extends ConfigManager {
-    public static final String SCHEDULE_TOPIC = "SCHEDULE_TOPIC_XXXX";
-    public static final String PRECISE_SCHEDULE_TOPIC = "PRECISE_SCHEDULE_TOPIC_XXXX";
-    public static final int SCHEDULE_QUEUE_ID = 100;
-    private static final Logger log = LoggerFactory.getLogger(LoggerName.StoreLoggerName);
-    private static final long FIRST_DELAY_TIME = 1000L;
-    private static final long DELAY_FOR_A_WHILE = 100L;
-    private static final long DELAY_FOR_A_PERIOD = 10000L;
-    private static final long SCHEDULE_PERIOD = 200L;
-    private static final long SCHEDULE_LOAD_STORAGE_PERIOD = 60*1000L; //一分钟一次查看未触发的定时
-    private static final int PRECISE_SLOT_SIZE = 675;
-    // 每个level对应的延时时间
-    private final ConcurrentHashMap<Integer /* level */, Long/* delay timeMillis */> delayLevelTable =
-            new ConcurrentHashMap<Integer, Long>(32);
-    // 延时计算到了哪里
-    private final ConcurrentHashMap<Integer /* level */, Long/* offset */> offsetTable =
-            new ConcurrentHashMap<Integer, Long>(32);
-    //准时队列到了哪里
-    private final ConcurrentHashMap<Integer /* time */, Long/* offset */> preciseOffsetTable =
-        new ConcurrentHashMap<Integer, Long>(144);
-    // 定时器
-    private final Timer timer = new Timer("ScheduleMessageTimerThread", true);
-    // 存储顶层对象
-    private final DefaultMessageStore defaultMessageStore;
-    // 最大值
-    private int maxDelayLevel;
-    //已经处理完的时间点标记
-    private long[] processTimeTag = new long[PRECISE_SLOT_SIZE];
-    //处理到的时间点(非绝对准确时间点，数据恢复用)
-    private long preciseTime;
+	public static final String SCHEDULE_TOPIC = "SCHEDULE_TOPIC_XXXX";
+	public static final String PRECISE_SCHEDULE_TOPIC = "PRECISE_SCHEDULE_TOPIC_XXXX";
+	public static final int SCHEDULE_QUEUE_ID = 100;
+	private static final Logger log = LoggerFactory
+			.getLogger(LoggerName.StoreLoggerName);
+	private static final long FIRST_DELAY_TIME = 1000L;
+	private static final long DELAY_FOR_A_WHILE = 100L;
+	private static final long DELAY_FOR_A_PERIOD = 10000L;
+	private static final long SCHEDULE_PERIOD = 200L;
+	private static final long SCHEDULE_LOAD_STORAGE_PERIOD = 60 * 1000L; // 一分钟一次查看未触发的定时
+	private static final int PRECISE_SLOT_SIZE = 675;
+	// 每个level对应的延时时间
+	private final ConcurrentHashMap<Integer /* level */, Long/* delay timeMillis */> delayLevelTable = new ConcurrentHashMap<Integer, Long>(
+			32);
+	// 延时计算到了哪里
+	private final ConcurrentHashMap<Integer /* level */, Long/* offset */> offsetTable = new ConcurrentHashMap<Integer, Long>(
+			32);
+	// 准时队列到了哪里
+	private final ConcurrentHashMap<Integer /* time */, Long/* offset */> preciseOffsetTable = new ConcurrentHashMap<Integer, Long>(
+			144);
+	// 定时器
+	private final Timer timer = new Timer("ScheduleMessageTimerThread", true);
+	// 存储顶层对象
+	private final DefaultMessageStore defaultMessageStore;
+	// 最大值
+	private int maxDelayLevel;
+	// 已经处理完的时间点标记
+	private long[] processTimeTag = new long[PRECISE_SLOT_SIZE];
+	// 处理到的时间点(非绝对准确时间点，数据恢复用)
+	private long preciseTime;
 
-    public ScheduleMessageService(final DefaultMessageStore defaultMessageStore) {
-        this.defaultMessageStore = defaultMessageStore;
-    }
-    
-    private void processPreciseTag(int queue, int slot) {
-    	long secondOfDay = queue*60*10 + slot;
-    	int arrSlot = (int)secondOfDay / PRECISE_SLOT_SIZE;
-    	int bitSlot = 8 - (int)secondOfDay % PRECISE_SLOT_SIZE;
-    	processTimeTag[arrSlot] = processTimeTag[arrSlot]|(1<<(bitSlot-1));
-    	preciseTime = secondOfDay;
-    }
-    
-    public void buildRunningStats(HashMap<String, String> stats) {
-        Iterator<Entry<Integer, Long>> it = this.offsetTable.entrySet().iterator();
-        while (it.hasNext()) {
-            Entry<Integer, Long> next = it.next();
-            int queueId = delayLevel2QueueId(next.getKey());
-            long delayOffset = next.getValue();
-            long maxOffset = this.defaultMessageStore.getMaxOffsetInQuque(SCHEDULE_TOPIC, queueId);
-            String value = String.format("%d,%d", delayOffset, maxOffset);
-            String key = String.format("%s_%d", RunningStats.scheduleMessageOffset.name(), next.getKey());
-            stats.put(key, value);
-        }
-    }
+	public ScheduleMessageService(final DefaultMessageStore defaultMessageStore) {
+		this.defaultMessageStore = defaultMessageStore;
+	}
 
+	private void processPreciseTag(int queue, int slot) {
+		long secondOfDay = queue * 60 * 10 + slot;
+		int arrSlot = (int) secondOfDay / PRECISE_SLOT_SIZE;
+		int bitSlot = 8 - (int) secondOfDay % PRECISE_SLOT_SIZE;
+		processTimeTag[arrSlot] = processTimeTag[arrSlot]
+				| (1 << (bitSlot - 1));
+		preciseTime = secondOfDay;
+	}
 
-    public static int queueId2DelayLevel(final int queueId) {
-        return queueId + 1;
-    }
+	public void buildRunningStats(HashMap<String, String> stats) {
+		Iterator<Entry<Integer, Long>> it = this.offsetTable.entrySet()
+				.iterator();
+		while (it.hasNext()) {
+			Entry<Integer, Long> next = it.next();
+			int queueId = delayLevel2QueueId(next.getKey());
+			long delayOffset = next.getValue();
+			long maxOffset = this.defaultMessageStore.getMaxOffsetInQuque(
+					SCHEDULE_TOPIC, queueId);
+			String value = String.format("%d,%d", delayOffset, maxOffset);
+			String key = String.format("%s_%d",
+					RunningStats.scheduleMessageOffset.name(), next.getKey());
+			stats.put(key, value);
+		}
+	}
 
+	public static int queueId2DelayLevel(final int queueId) {
+		return queueId + 1;
+	}
 
-    public static int delayLevel2QueueId(final int delayLevel) {
-        return delayLevel - 1;
-    }
+	public static int delayLevel2QueueId(final int delayLevel) {
+		return delayLevel - 1;
+	}
 
+	private void updateOffset(int delayLevel, long offset) {
+		this.offsetTable.put(delayLevel, offset);
+	}
 
-    private void updateOffset(int delayLevel, long offset) {
-        this.offsetTable.put(delayLevel, offset);
-    }
+	public long computeDeliverTimestamp(final int delayLevel,
+			final long storeTimestamp) {
+		Long time = this.delayLevelTable.get(delayLevel);
+		if (time != null) {
+			return time + storeTimestamp;
+		}
 
+		return storeTimestamp + 1000;
+	}
 
-    public long computeDeliverTimestamp(final int delayLevel, final long storeTimestamp) {
-        Long time = this.delayLevelTable.get(delayLevel);
-        if (time != null) {
-            return time + storeTimestamp;
-        }
+	public long computePreciseDeliverTimestamp(final long deplayTime,
+			final long storeTimestamp) {
+		return storeTimestamp + deplayTime;
+	}
 
-        return storeTimestamp + 1000;
-    }
-    
-    
-    public long computePreciseDeliverTimestamp(final long deplayTime, final long storeTimestamp) {
-        return storeTimestamp + deplayTime;
-    }
+	public long getPreciseOffset(int queueId) {
+		return preciseOffsetTable.get(queueId) == null ? 0 : preciseOffsetTable
+				.get(queueId);
+	}
 
-    public long getPreciseOffset(int queueId) {
-    	return preciseOffsetTable.get(queueId)==null?0:preciseOffsetTable.get(queueId);
-    }
-
-    public void start() {
+	public void start() {
+    	log.info("come into Schedule......");
         // 为每个延时队列增加定时器
         for (Integer level : this.delayLevelTable.keySet()) {
             Long timeDelay = this.delayLevelTable.get(level);
@@ -177,335 +181,368 @@ public class ScheduleMessageService extends ConfigManager {
         }, 10000, this.defaultMessageStore.getMessageStoreConfig().getFlushDelayOffsetInterval());
     }
 
+	public void shutdown() {
+		this.timer.cancel();
+	}
 
-    public void shutdown() {
-        this.timer.cancel();
-    }
+	public int getMaxDelayLevel() {
+		return maxDelayLevel;
+	}
 
+	public String encode() {
+		return this.encode(false);
+	}
 
-    public int getMaxDelayLevel() {
-        return maxDelayLevel;
-    }
+	public String encode(final boolean prettyFormat) {
+		DelayOffsetSerializeWrapper delayOffsetSerializeWrapper = new DelayOffsetSerializeWrapper();
+		delayOffsetSerializeWrapper.setOffsetTable(this.offsetTable);
+		delayOffsetSerializeWrapper
+				.setPreciseOffsetTable(this.preciseOffsetTable);
+		delayOffsetSerializeWrapper.setPreciseTime(preciseTime);
+		delayOffsetSerializeWrapper.setProcessTimeTag(processTimeTag);
+		return delayOffsetSerializeWrapper.toJson(prettyFormat);
+	}
 
-
-    public String encode() {
-        return this.encode(false);
-    }
-
-
-    public String encode(final boolean prettyFormat) {
-        DelayOffsetSerializeWrapper delayOffsetSerializeWrapper = new DelayOffsetSerializeWrapper();
-        delayOffsetSerializeWrapper.setOffsetTable(this.offsetTable);
-        delayOffsetSerializeWrapper.setPreciseOffsetTable(this.preciseOffsetTable);
-        delayOffsetSerializeWrapper.setPreciseTime(preciseTime);
-        delayOffsetSerializeWrapper.setProcessTimeTag(processTimeTag);
-        return delayOffsetSerializeWrapper.toJson(prettyFormat);
-    }
-
-
-    @Override
-    public void decode(String jsonString) {
-        if (jsonString != null) {
-            DelayOffsetSerializeWrapper delayOffsetSerializeWrapper =
-                    DelayOffsetSerializeWrapper.fromJson(jsonString, DelayOffsetSerializeWrapper.class);
-            if (delayOffsetSerializeWrapper != null) {
-                this.offsetTable.putAll(delayOffsetSerializeWrapper.getOffsetTable());
-            }
-        }
-    }
-
-
-    @Override
-    public String configFilePath() {
-        return this.defaultMessageStore.getMessageStoreConfig().getDelayOffsetStorePath();
-    }
-
-
-    public boolean load() {
-        boolean result = super.load();
-        int queueId = ScheduleHelper.getQueueId(System.currentTimeMillis());
-        ScheduleConsumeQueue queue = (ScheduleConsumeQueue)defaultMessageStore.findConsumeQueue(PRECISE_SCHEDULE_TOPIC, queueId);
-		if(queue.getStatus().equals(ScheduleConsumeQueue.UNLOAD)) {
-			result = result&&queue.storageLoad();
+	@Override
+	public void decode(String jsonString) {
+		if (jsonString != null) {
+			DelayOffsetSerializeWrapper delayOffsetSerializeWrapper = DelayOffsetSerializeWrapper
+					.fromJson(jsonString, DelayOffsetSerializeWrapper.class);
+			if (delayOffsetSerializeWrapper != null) {
+				this.offsetTable.putAll(delayOffsetSerializeWrapper
+						.getOffsetTable());
+			}
 		}
-		ScheduleConsumeQueue queue2 = (ScheduleConsumeQueue)defaultMessageStore.findConsumeQueue(PRECISE_SCHEDULE_TOPIC, (queueId+1)%144);
-		if(queue2.getStatus().equals(ScheduleConsumeQueue.UNLOAD)) {
-			result = result&&queue2.storageLoad();
+	}
+
+	@Override
+	public String configFilePath() {
+		return this.defaultMessageStore.getMessageStoreConfig()
+				.getDelayOffsetStorePath();
+	}
+
+	public boolean load() {
+		boolean result = super.load();
+		int queueId = ScheduleHelper.getQueueId(System.currentTimeMillis());
+		ScheduleConsumeQueue queue = (ScheduleConsumeQueue) defaultMessageStore
+				.findConsumeQueue(PRECISE_SCHEDULE_TOPIC, queueId);
+		if (queue.getStatus().equals(ScheduleConsumeQueue.UNLOAD)) {
+			result = result && queue.storageLoad();
 		}
-        result = result && this.parseDelayLevel();
-        return result;
-    }
+		ScheduleConsumeQueue queue2 = (ScheduleConsumeQueue) defaultMessageStore
+				.findConsumeQueue(PRECISE_SCHEDULE_TOPIC, (queueId + 1) % 144);
+		if (queue2.getStatus().equals(ScheduleConsumeQueue.UNLOAD)) {
+			result = result && queue2.storageLoad();
+		}
+		result = result && this.parseDelayLevel();
+		log.info("ScheduleMessageService loaded....."+result);
+		return result;
+	}
 
+	public boolean parseDelayLevel() {
+		HashMap<String, Long> timeUnitTable = new HashMap<String, Long>();
+		timeUnitTable.put("s", 1000L);
+		timeUnitTable.put("m", 1000L * 60);
+		timeUnitTable.put("h", 1000L * 60 * 60);
+		timeUnitTable.put("d", 1000L * 60 * 60 * 24);
 
-    public boolean parseDelayLevel() {
-        HashMap<String, Long> timeUnitTable = new HashMap<String, Long>();
-        timeUnitTable.put("s", 1000L);
-        timeUnitTable.put("m", 1000L * 60);
-        timeUnitTable.put("h", 1000L * 60 * 60);
-        timeUnitTable.put("d", 1000L * 60 * 60 * 24);
+		String levelString = this.defaultMessageStore.getMessageStoreConfig()
+				.getMessageDelayLevel();
+		try {
+			String[] levelArray = levelString.split(" ");
+			for (int i = 0; i < levelArray.length; i++) {
+				String value = levelArray[i];
+				String ch = value.substring(value.length() - 1);
+				Long tu = timeUnitTable.get(ch);
 
-        String levelString = this.defaultMessageStore.getMessageStoreConfig().getMessageDelayLevel();
-        try {
-            String[] levelArray = levelString.split(" ");
-            for (int i = 0; i < levelArray.length; i++) {
-                String value = levelArray[i];
-                String ch = value.substring(value.length() - 1);
-                Long tu = timeUnitTable.get(ch);
+				int level = i + 1;
+				if (level > this.maxDelayLevel) {
+					this.maxDelayLevel = level;
+				}
+				long num = Long.parseLong(value
+						.substring(0, value.length() - 1));
+				long delayTimeMillis = tu * num;
+				this.delayLevelTable.put(level, delayTimeMillis);
+			}
+		} catch (Exception e) {
+			log.error("parseDelayLevel exception", e);
+			log.info("levelString String = {}", levelString);
+			return false;
+		}
 
-                int level = i + 1;
-                if (level > this.maxDelayLevel) {
-                    this.maxDelayLevel = level;
-                }
-                long num = Long.parseLong(value.substring(0, value.length() - 1));
-                long delayTimeMillis = tu * num;
-                this.delayLevelTable.put(level, delayTimeMillis);
-            }
-        }
-        catch (Exception e) {
-            log.error("parseDelayLevel exception", e);
-            log.info("levelString String = {}", levelString);
-            return false;
-        }
+		return true;
+	}
 
-        return true;
-    }
+	class LoadStorageTask extends TimerTask {
+		@Override
+		public void run() {
+			try {
+				this.executeStorageLoader();
+			} catch (Exception e) {
+				log.error("executeStorageLoader exception", e);
+				ScheduleMessageService.this.timer.schedule(
+						new LoadStorageTask(), DELAY_FOR_A_PERIOD);
+			}
+		}
 
-    class LoadStorageTask extends TimerTask {
-    	@Override
-        public void run() {
-            try {
-                this.executeStorageLoader();
-            }
-            catch (Exception e) {
-                log.error("executeStorageLoader exception", e);
-                ScheduleMessageService.this.timer.schedule(new LoadStorageTask(), DELAY_FOR_A_PERIOD);
-            }
-        }
-    	
-    	private void executeStorageLoader() {
-    		int queueId = ScheduleHelper.getQueueId(System.currentTimeMillis()+5*60*1000);
-        	log.info("come into LoadStorageTask:---queueId="+queueId);
-    		ScheduleConsumeQueue queue = (ScheduleConsumeQueue)defaultMessageStore.findConsumeQueue(PRECISE_SCHEDULE_TOPIC, queueId);
-    		log.info("come into LoadStorageTask:---queueStatus="+queue.getStatus());
-    		if(queue.getStatus().equals(ScheduleConsumeQueue.UNLOAD)) {
-    			boolean result = queue.storageLoad();
-    			log.info("come into LoadStorageTask:---result="+result);
-    			if(!result) {
-                    ScheduleMessageService.this.timer.schedule(new LoadStorageTask(), DELAY_FOR_A_PERIOD);
-    			}
-    		}
-    	}
-    }
-    
-    class DeliverPreciseScheduleMessageTask extends TimerTask {
+		private void executeStorageLoader() {
+			int queueId = ScheduleHelper
+					.getQueueId(System.currentTimeMillis() + 5 * 60 * 1000);
+			log.info("come into LoadStorageTask:---queueId=" + queueId);
+			ScheduleConsumeQueue queue = (ScheduleConsumeQueue) defaultMessageStore
+					.findConsumeQueue(PRECISE_SCHEDULE_TOPIC, queueId);
+			log.info("come into LoadStorageTask:---queueStatus="
+					+ queue.getStatus());
+			if (queue.getStatus().equals(ScheduleConsumeQueue.UNLOAD)) {
+				boolean result = queue.storageLoad();
+				log.info("come into LoadStorageTask:---result=" + result);
+				if (!result) {
+					ScheduleMessageService.this.timer.schedule(
+							new LoadStorageTask(), DELAY_FOR_A_PERIOD);
+				}
+			}
+		}
+	}
 
-    	private int queueId;
-    	
-    	private int slot;
-    	
-    	public DeliverPreciseScheduleMessageTask(int queueId, int slot) {
-    		this.queueId = queueId;
-    		this.slot = slot;
-        }
+	class DeliverPreciseScheduleMessageTask extends TimerTask {
 
-        @Override
-        public void run() {
-            try {
-                this.executePreciseOnTimeup();
-            }
-            catch (Exception e) {
-                log.error("executePreciseOnTimeup exception", e);
-                ScheduleMessageService.this.timer.schedule(new DeliverPreciseScheduleMessageTask(queueId, slot), SCHEDULE_PERIOD);
-            }
-        }
+		private int queueId;
 
+		private int slot;
 
-        private void executePreciseOnTimeup() {
-        	long timestamp = System.currentTimeMillis();
-        	int queueId = ScheduleHelper.getQueueId(timestamp);
-        	int slot = ScheduleHelper.getSlotInQueue(timestamp, queueId);
-        	if(this.queueId!=0) {
-        		queueId = this.queueId;
-        		slot = this.slot;
-        	}
-        	log.info("come into DeliverPreciseScheduleMessageTask:---queueId="+queueId+"---slot="+slot+"---time="+timestamp);
-        	ScheduleConsumeQueue queue = (ScheduleConsumeQueue)ScheduleMessageService.this.defaultMessageStore.findConsumeQueue(PRECISE_SCHEDULE_TOPIC, queueId);
-    		log.info("come into DeliverPreciseScheduleMessageTask:---queueStatus="+queue.getStatus());
-        	if(queue!=null&&(queue.equals(ScheduleConsumeQueue.LOADING)||queue.equals(ScheduleConsumeQueue.UNLOAD))) {
-        		log.info("come into DeliverPreciseScheduleMessageTask:---1IsInProcess="+queue.getIsInProcess(slot).get());
-        		if(!queue.getIsInProcess(slot).get()) {
-        			boolean oldValue = queue.getIsInProcess(slot).getAndSet(true);
-            		log.info("come into DeliverPreciseScheduleMessageTask:---1IsInProcessOldValue="+oldValue);
-        			if(!oldValue) {
-        				ConcurrentLinkedQueue<ScheduleMsgInfo> msgQueue = queue.getScheduleMsgs(slot);
-                		log.info("come into DeliverPreciseScheduleMessageTask:---msgQueue="+msgQueue.size());
-                		ScheduleMsgInfo msg = msgQueue.poll();
-                		while(msg!=null) {
-                			long commitOffset = msg.getCommitOffset();
-                			int size = msg.getSize();
-                			MessageExt msgExt = ScheduleMessageService.this.defaultMessageStore.lookMessageByOffset(
-                					commitOffset, size);
-        	                if (msgExt != null) {
-        	                    MessageExtBrokerInner msgInner = messageTimeup(msgExt);
-        	                    PutMessageResult putMessageResult =
-        	                            ScheduleMessageService.this.defaultMessageStore
-        	                                .putMessage(msgInner);
-        	                    boolean isSuccess = putMessageResult != null && putMessageResult.getPutMessageStatus() == PutMessageStatus.PUT_OK;
-        	                    if(!isSuccess) {
-        	                    	msgQueue.add(msg);
-        	                    }
-        	                }
-                			msg = msgQueue.poll();
-                		}
-                		queue.setInProcess(slot, false);
-                		processPreciseTag(queue.getQueueId(), slot);
-                		if(slot==599) {
-                			long lastOffset = queue.releaseStorage();
-                    		preciseOffsetTable.put(queue.getQueueId(), lastOffset);
-                		}
-        			}
-        		}
-        	}
-        	
-        }
-        
-    }
-    
+		public DeliverPreciseScheduleMessageTask(int queueId, int slot) {
+			this.queueId = queueId;
+			this.slot = slot;
+		}
 
-    
-    class DeliverDelayedMessageTimerTask extends TimerTask {
-        private final int delayLevel;
-        private final long offset;
+		@Override
+		public void run() {
+			try {
+				this.executePreciseOnTimeup();
+			} catch (Exception e) {
+				log.error("executePreciseOnTimeup exception", e);
+				ScheduleMessageService.this.timer.schedule(
+						new DeliverPreciseScheduleMessageTask(queueId, slot),
+						SCHEDULE_PERIOD);
+			}
+		}
 
+		private void executePreciseOnTimeup() {
+			long timestamp = System.currentTimeMillis();
+			int queueId = ScheduleHelper.getQueueId(timestamp);
+			int slot = ScheduleHelper.getSlotInQueue(timestamp, queueId);
+			if (this.queueId != 0) {
+				queueId = this.queueId;
+				slot = this.slot;
+			}
+			log.info("come into DeliverPreciseScheduleMessageTask:---queueId="
+					+ queueId + "---slot=" + slot + "---time=" + timestamp);
+			ScheduleConsumeQueue queue = (ScheduleConsumeQueue) ScheduleMessageService.this.defaultMessageStore
+					.findConsumeQueue(PRECISE_SCHEDULE_TOPIC, queueId);
+			log
+					.info("come into DeliverPreciseScheduleMessageTask:---queueStatus="
+							+ queue.getStatus());
+			if (queue != null
+					&& (queue.getStatus().equals(ScheduleConsumeQueue.LOADING) || queue.getStatus()
+							.equals(ScheduleConsumeQueue.UNLOAD))) {
+				log
+						.info("come into DeliverPreciseScheduleMessageTask:---1IsInProcess="
+								+ queue.getIsInProcess(slot).get());
+				if (!queue.getIsInProcess(slot).get()) {
+					boolean oldValue = queue.getIsInProcess(slot).getAndSet(
+							true);
+					log
+							.info("come into DeliverPreciseScheduleMessageTask:---1IsInProcessOldValue="
+									+ oldValue);
+					if (!oldValue) {
+						ConcurrentLinkedQueue<ScheduleMsgInfo> msgQueue = queue
+								.getScheduleMsgs(slot);
+						log
+								.info("come into DeliverPreciseScheduleMessageTask:---msgQueue="
+										+ msgQueue.size());
+						ScheduleMsgInfo msg = msgQueue.poll();
+						while (msg != null) {
+							long commitOffset = msg.getCommitOffset();
+							int size = msg.getSize();
+							MessageExt msgExt = ScheduleMessageService.this.defaultMessageStore
+									.lookMessageByOffset(commitOffset, size);
+							if (msgExt != null) {
+								MessageExtBrokerInner msgInner = messageTimeup(msgExt);
+								PutMessageResult putMessageResult = ScheduleMessageService.this.defaultMessageStore
+										.putMessage(msgInner);
+								boolean isSuccess = putMessageResult != null
+										&& putMessageResult
+												.getPutMessageStatus() == PutMessageStatus.PUT_OK;
+								if (!isSuccess) {
+									msgQueue.add(msg);
+								}
+							}
+							msg = msgQueue.poll();
+						}
+						queue.setInProcess(slot, false);
+						processPreciseTag(queue.getQueueId(), slot);
+						if (slot == 599) {
+							long lastOffset = queue.releaseStorage();
+							preciseOffsetTable.put(queue.getQueueId(),
+									lastOffset);
+						}
+					}
+				}
+			}
 
-        public DeliverDelayedMessageTimerTask(int delayLevel, long offset) {
-            this.delayLevel = delayLevel;
-            this.offset = offset;
-        }
+		}
 
+	}
 
-        @Override
-        public void run() {
-            try {
-                this.executeOnTimeup();
-                
-            }
-            catch (Exception e) {
-                log.error("executeOnTimeup exception", e);
-                ScheduleMessageService.this.timer.schedule(new DeliverDelayedMessageTimerTask(
-                    this.delayLevel, this.offset), DELAY_FOR_A_PERIOD);
-            }
-        }
+	class DeliverDelayedMessageTimerTask extends TimerTask {
+		private final int delayLevel;
+		private final long offset;
 
+		public DeliverDelayedMessageTimerTask(int delayLevel, long offset) {
+			this.delayLevel = delayLevel;
+			this.offset = offset;
+		}
 
-        public void executeOnTimeup() {
-            ConsumeQueue cq =
-                    ScheduleMessageService.this.defaultMessageStore.findConsumeQueue(SCHEDULE_TOPIC,
-                        delayLevel2QueueId(delayLevel));
-            if (cq != null) {
-                SelectMapedBufferResult bufferCQ = cq.getIndexBuffer(this.offset);
-                if (bufferCQ != null) {
-                    try {
-                        long nextOffset = offset;
-                        int i = 0;
-                        for (; i < bufferCQ.getSize(); i += ConsumeQueue.CQStoreUnitSize) {
-                            long offsetPy = bufferCQ.getByteBuffer().getLong();
-                            int sizePy = bufferCQ.getByteBuffer().getInt();
-                            long tagsCode = bufferCQ.getByteBuffer().getLong();
+		@Override
+		public void run() {
+			try {
+				this.executeOnTimeup();
 
-                            // 队列里存储的tagsCode实际是一个时间点
-                            long deliverTimestamp = tagsCode;
+			} catch (Exception e) {
+				log.error("executeOnTimeup exception", e);
+				ScheduleMessageService.this.timer.schedule(
+						new DeliverDelayedMessageTimerTask(this.delayLevel,
+								this.offset), DELAY_FOR_A_PERIOD);
+			}
+		}
 
-                            nextOffset = offset + (i / ConsumeQueue.CQStoreUnitSize);
+		public void executeOnTimeup() {
+			ConsumeQueue cq = ScheduleMessageService.this.defaultMessageStore
+					.findConsumeQueue(SCHEDULE_TOPIC,
+							delayLevel2QueueId(delayLevel));
+			if (cq != null) {
+				SelectMapedBufferResult bufferCQ = cq
+						.getIndexBuffer(this.offset);
+				if (bufferCQ != null) {
+					try {
+						long nextOffset = offset;
+						int i = 0;
+						for (; i < bufferCQ.getSize(); i += ConsumeQueue.CQStoreUnitSize) {
+							long offsetPy = bufferCQ.getByteBuffer().getLong();
+							int sizePy = bufferCQ.getByteBuffer().getInt();
+							long tagsCode = bufferCQ.getByteBuffer().getLong();
 
-                            long countdown = deliverTimestamp - System.currentTimeMillis();
-                            // 时间到了，该投递
-                            if (countdown <= 0) {
-                                MessageExt msgExt =
-                                        ScheduleMessageService.this.defaultMessageStore.lookMessageByOffset(
-                                            offsetPy, sizePy);
-                                if (msgExt != null) {
-                                    MessageExtBrokerInner msgInner = messageTimeup(msgExt);
-                                    PutMessageResult putMessageResult =
-                                            ScheduleMessageService.this.defaultMessageStore
-                                                .putMessage(msgInner);
-                                    // 成功
-                                    if (putMessageResult != null
-                                            && putMessageResult.getPutMessageStatus() == PutMessageStatus.PUT_OK) {
-                                        continue;
-                                    }
-                                    // 失败
-                                    else {
-                                        log.error(
-                                            "a message time up, but reput it failed, topic: {} msgId {}",
-                                            msgExt.getTopic(), msgExt.getMsgId());
-                                        ScheduleMessageService.this.timer.schedule(
-                                            new DeliverDelayedMessageTimerTask(this.delayLevel, nextOffset),
-                                            DELAY_FOR_A_PERIOD);
-                                        ScheduleMessageService.this.updateOffset(this.delayLevel, nextOffset);
-                                        return;
-                                    }
-                                }
-                            }
-                            // 时候未到，继续定时
-                            else {
-                                ScheduleMessageService.this.timer.schedule(
-                                    new DeliverDelayedMessageTimerTask(this.delayLevel, nextOffset),
-                                    countdown);
-                                ScheduleMessageService.this.updateOffset(this.delayLevel, nextOffset);
-                                return;
-                            }
-                        } // end of for
+							// 队列里存储的tagsCode实际是一个时间点
+							long deliverTimestamp = tagsCode;
 
-                        nextOffset = offset + (i / ConsumeQueue.CQStoreUnitSize);
-                        ScheduleMessageService.this.timer.schedule(new DeliverDelayedMessageTimerTask(
-                            this.delayLevel, nextOffset), DELAY_FOR_A_WHILE);
-                        ScheduleMessageService.this.updateOffset(this.delayLevel, nextOffset);
-                        return;
-                    }
-                    finally {
-                        // 必须释放资源
-                        bufferCQ.release();
-                    }
-                } // end of if (bufferCQ != null)
-            } // end of if (cq != null)
+							nextOffset = offset
+									+ (i / ConsumeQueue.CQStoreUnitSize);
 
-            ScheduleMessageService.this.timer.schedule(new DeliverDelayedMessageTimerTask(this.delayLevel,
-                this.offset), DELAY_FOR_A_WHILE);
-        }
+							long countdown = deliverTimestamp
+									- System.currentTimeMillis();
+							// 时间到了，该投递
+							if (countdown <= 0) {
+								MessageExt msgExt = ScheduleMessageService.this.defaultMessageStore
+										.lookMessageByOffset(offsetPy, sizePy);
+								if (msgExt != null) {
+									MessageExtBrokerInner msgInner = messageTimeup(msgExt);
+									PutMessageResult putMessageResult = ScheduleMessageService.this.defaultMessageStore
+											.putMessage(msgInner);
+									// 成功
+									if (putMessageResult != null
+											&& putMessageResult
+													.getPutMessageStatus() == PutMessageStatus.PUT_OK) {
+										continue;
+									}
+									// 失败
+									else {
+										log
+												.error(
+														"a message time up, but reput it failed, topic: {} msgId {}",
+														msgExt.getTopic(),
+														msgExt.getMsgId());
+										ScheduleMessageService.this.timer
+												.schedule(
+														new DeliverDelayedMessageTimerTask(
+																this.delayLevel,
+																nextOffset),
+														DELAY_FOR_A_PERIOD);
+										ScheduleMessageService.this
+												.updateOffset(this.delayLevel,
+														nextOffset);
+										return;
+									}
+								}
+							}
+							// 时候未到，继续定时
+							else {
+								ScheduleMessageService.this.timer.schedule(
+										new DeliverDelayedMessageTimerTask(
+												this.delayLevel, nextOffset),
+										countdown);
+								ScheduleMessageService.this.updateOffset(
+										this.delayLevel, nextOffset);
+								return;
+							}
+						} // end of for
 
-    }
-    
-    private MessageExtBrokerInner messageTimeup(MessageExt msgExt) {
-        MessageExtBrokerInner msgInner = new MessageExtBrokerInner();
-        msgInner.setBody(msgExt.getBody());
-        msgInner.setFlag(msgExt.getFlag());
-        msgInner.setProperties(msgExt.getProperties());
+						nextOffset = offset
+								+ (i / ConsumeQueue.CQStoreUnitSize);
+						ScheduleMessageService.this.timer.schedule(
+								new DeliverDelayedMessageTimerTask(
+										this.delayLevel, nextOffset),
+								DELAY_FOR_A_WHILE);
+						ScheduleMessageService.this.updateOffset(
+								this.delayLevel, nextOffset);
+						return;
+					} finally {
+						// 必须释放资源
+						bufferCQ.release();
+					}
+				} // end of if (bufferCQ != null)
+			} // end of if (cq != null)
 
-        TopicFilterType topicFilterType = MessageExt.parseTopicFilterType(msgInner.getSysFlag());
-        long tagsCodeValue =
-                MessageExtBrokerInner.tagsString2tagsCode(topicFilterType, msgInner.getTags());
-        msgInner.setTagsCode(tagsCodeValue);
-        msgInner.setPropertiesString(MessageDecoder.messageProperties2String(msgExt.getProperties()));
+			ScheduleMessageService.this.timer.schedule(
+					new DeliverDelayedMessageTimerTask(this.delayLevel,
+							this.offset), DELAY_FOR_A_WHILE);
+		}
 
-        msgInner.setSysFlag(msgExt.getSysFlag());
-        msgInner.setBornTimestamp(msgExt.getBornTimestamp());
-        msgInner.setBornHost(msgExt.getBornHost());
-        msgInner.setStoreHost(msgExt.getStoreHost());
-        msgInner.setReconsumeTimes(msgExt.getReconsumeTimes());
+	}
 
-        msgInner.setWaitStoreMsgOK(false);
-        msgInner.clearProperty(MessageConst.PROPERTY_DELAY_TIME_LEVEL);
+	private MessageExtBrokerInner messageTimeup(MessageExt msgExt) {
+		MessageExtBrokerInner msgInner = new MessageExtBrokerInner();
+		msgInner.setBody(msgExt.getBody());
+		msgInner.setFlag(msgExt.getFlag());
+		msgInner.setProperties(msgExt.getProperties());
 
-        // 恢复Topic
-        msgInner.setTopic(msgInner.getProperty(MessageConst.PROPERTY_REAL_TOPIC));
+		TopicFilterType topicFilterType = MessageExt
+				.parseTopicFilterType(msgInner.getSysFlag());
+		long tagsCodeValue = MessageExtBrokerInner.tagsString2tagsCode(
+				topicFilterType, msgInner.getTags());
+		msgInner.setTagsCode(tagsCodeValue);
+		msgInner.setPropertiesString(MessageDecoder
+				.messageProperties2String(msgExt.getProperties()));
 
-        // 恢复QueueId
-        String queueIdStr = msgInner.getProperty(MessageConst.PROPERTY_REAL_QUEUE_ID);
-        int queueId = Integer.parseInt(queueIdStr);
-        msgInner.setQueueId(queueId);
+		msgInner.setSysFlag(msgExt.getSysFlag());
+		msgInner.setBornTimestamp(msgExt.getBornTimestamp());
+		msgInner.setBornHost(msgExt.getBornHost());
+		msgInner.setStoreHost(msgExt.getStoreHost());
+		msgInner.setReconsumeTimes(msgExt.getReconsumeTimes());
 
-        return msgInner;
-    }
-    
+		msgInner.setWaitStoreMsgOK(false);
+		msgInner.clearProperty(MessageConst.PROPERTY_DELAY_TIME_LEVEL);
+
+		// 恢复Topic
+		msgInner.setTopic(msgInner
+				.getProperty(MessageConst.PROPERTY_REAL_TOPIC));
+
+		// 恢复QueueId
+		String queueIdStr = msgInner
+				.getProperty(MessageConst.PROPERTY_REAL_QUEUE_ID);
+		int queueId = Integer.parseInt(queueIdStr);
+		msgInner.setQueueId(queueId);
+
+		return msgInner;
+	}
+
 }
