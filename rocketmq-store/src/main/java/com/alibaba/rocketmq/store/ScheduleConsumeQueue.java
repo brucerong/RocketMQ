@@ -67,6 +67,7 @@ public class ScheduleConsumeQueue extends ConsumeQueue {
     	//提前把QUEUE都new好，需要线程安全
     	for(int i=0;i<600;i++) {
     		scheduleMsgTable[i] = new ConcurrentLinkedQueue<ScheduleMsgInfo>();
+    		isInProcessArr[i] = new AtomicBoolean(false);
     	}
     	status = LOADING;
     	long offset = this.getDefaultMessageStore().getScheduleMessageService().getPreciseOffset(this.getQueueId());
