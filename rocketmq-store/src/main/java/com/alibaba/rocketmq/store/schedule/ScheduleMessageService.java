@@ -339,12 +339,11 @@ public class ScheduleMessageService extends ConfigManager {
 					+ queueId + "---slot=" + slot + "---time=" + timestamp);
 			ScheduleConsumeQueue queue = (ScheduleConsumeQueue) ScheduleMessageService.this.defaultMessageStore
 					.findConsumeQueue(PRECISE_SCHEDULE_TOPIC, queueId);
-			log
-					.info("come into DeliverPreciseScheduleMessageTask:---queueStatus="
+			log.info("come into DeliverPreciseScheduleMessageTask:---queueStatus="
 							+ queue.getStatus());
 			if (queue != null
 					&& (queue.getStatus().equals(ScheduleConsumeQueue.LOADING) || queue.getStatus()
-							.equals(ScheduleConsumeQueue.UNLOAD))) {
+							.equals(ScheduleConsumeQueue.LOADED))) {
 				log
 						.info("come into DeliverPreciseScheduleMessageTask:---1IsInProcess="
 								+ queue.getIsInProcess(slot).get());
