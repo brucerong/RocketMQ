@@ -335,30 +335,21 @@ public class ScheduleMessageService extends ConfigManager {
 				queueId = this.queueId;
 				slot = this.slot;
 			}
-			log.info("come into DeliverPreciseScheduleMessageTask:---queueId="
-					+ queueId + "---slot=" + slot + "---time=" + timestamp);
 			ScheduleConsumeQueue queue = (ScheduleConsumeQueue) ScheduleMessageService.this.defaultMessageStore
 					.findConsumeQueue(PRECISE_SCHEDULE_TOPIC, queueId);
-			log.info("come into DeliverPreciseScheduleMessageTask:---queueStatus="
-							+ queue.getStatus());
 			if (queue != null
 					&& (queue.getStatus().equals(ScheduleConsumeQueue.LOADING) || queue.getStatus()
 							.equals(ScheduleConsumeQueue.LOADED))) {
-				log
-						.info("come into DeliverPreciseScheduleMessageTask:---1IsInProcess="
-								+ queue.getIsInProcess(slot).get());
 				if (!queue.getIsInProcess(slot).get()) {
 					boolean oldValue = queue.getIsInProcess(slot).getAndSet(
 							true);
-					log
-							.info("come into DeliverPreciseScheduleMessageTask:---1IsInProcessOldValue="
-									+ oldValue);
 					if (!oldValue) {
 						ConcurrentLinkedQueue<ScheduleMsgInfo> msgQueue = queue
 								.getScheduleMsgs(slot);
-						log
-								.info("come into DeliverPreciseScheduleMessageTask:---msgQueue="
-										+ msgQueue.size());
+						if(msgQueue.size()!=0) {
+							log.info("come into DeliverPreciseScheduleMessageTask:---msgQueue="
+									+ msgQueue.size()+"---queueID="+queueId+"---slot="+slot);
+						}
 						ScheduleMsgInfo msg = msgQueue.poll();
 						while (msg != null) {
 							long commitOffset = msg.getCommitOffset();
@@ -373,6 +364,7 @@ public class ScheduleMessageService extends ConfigManager {
 										&& putMessageResult
 												.getPutMessageStatus() == PutMessageStatus.PUT_OK;
 								if (!isSuccess) {
+									log.info("come into DeliverPreciseScheduleMessageTask:---failure---queueID="+queueId+"---slot="+slot);
 									msgQueue.add(msg);
 								}
 							}
@@ -530,6 +522,7 @@ public class ScheduleMessageService extends ConfigManager {
 
 		msgInner.setWaitStoreMsgOK(false);
 		msgInner.clearProperty(MessageConst.PROPERTY_DELAY_TIME_LEVEL);
+		msgInner.clearProperty(MessageConst.PROPERTY_DELAY_TIME);
 
 		// 恢复Topic
 		msgInner.setTopic(msgInner
