@@ -822,13 +822,14 @@ public class DefaultMessageStore implements MessageStore {
                         this.getMessageStoreConfig().getStorePathConsumeQueue(),//
                         this.getMessageStoreConfig().getMapedFileSizeConsumeQueue(),//
                         this);
-                ConsumeQueue oldLogic = map.putIfAbsent(queueId, newLogic);
-                if (oldLogic != null) {
-                    logic = oldLogic;
-                }
-                else {
-                    logic = newLogic;
-                }
+            }
+            
+            ConsumeQueue oldLogic = map.putIfAbsent(queueId, newLogic);
+            if (oldLogic != null) {
+                logic = oldLogic;
+            }
+            else {
+                logic = newLogic;
             }
         }
 
