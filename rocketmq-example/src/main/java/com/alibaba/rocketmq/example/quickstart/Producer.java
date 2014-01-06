@@ -47,7 +47,7 @@ public class Producer {
 						                    "TagA",// tag
 						                    ("Hello RocketMQ " + i).getBytes()// body
 						                        );
-						            msg.setDelayTime(10000);
+//						            msg.setDelayTime(10000);
 						            SendResult sendResult = producer.send(msg);
 			            			long timetime2 = System.currentTimeMillis();
 						            System.out.println((timetime2-timetime1)+"ms--"+sendResult);
