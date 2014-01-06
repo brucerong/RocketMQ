@@ -27,25 +27,64 @@ import com.alibaba.rocketmq.common.message.Message;
  */
 public class Producer {
     public static void main(String[] args) throws MQClientException, InterruptedException {
-        DefaultMQProducer producer = new DefaultMQProducer("please_rename_unique_group_name");
-
+        final DefaultMQProducer producer = new DefaultMQProducer("hahaha");
+        producer.setNamesrvAddr("10.125.13.150:9876");
         producer.start();
 
-        for (int i = 0; i < 1000; i++) {
-            try {
-                Message msg = new Message("TopicTest",// topic
-                    "TagA",// tag
-                    ("Hello RocketMQ " + i).getBytes()// body
-                        );
-                SendResult sendResult = producer.send(msg);
-                System.out.println(sendResult);
-            }
-            catch (Exception e) {
-                e.printStackTrace();
-                Thread.sleep(1000);
-            }
+        Thread[] threads = new Thread[5000];
+        for(int i=0;i<2000;i++) {
+        	Thread thread = new Thread(new Runnable() {
+				
+				@Override
+				public void run() {
+					while(true) {
+						long time1 = System.currentTimeMillis();
+			            
+			            	for(int i=0;i<10;i++) {
+			            		try {
+			            			long timetime1 = System.currentTimeMillis();
+				            		Message msg = new Message("guanghao",// topic
+						                    "TagA",// tag
+						                    ("Hello RocketMQ " + i).getBytes()// body
+						                        );
+						            msg.setDelayTime(10000);
+						            SendResult sendResult = producer.send(msg);
+			            			long timetime2 = System.currentTimeMillis();
+						            System.out.println((timetime2-timetime1)+"ms--"+sendResult);
+			            		} catch (Exception e) {
+					                e.printStackTrace();
+					            }
+			            	}
+		            	long time2 = System.currentTimeMillis();
+//			            if(time2-time1>1000) {
+//				            	System.out.println(">1000");
+//			            } else {
+//			            	try {
+//								Thread.sleep(1000-(time2-time1));
+//							} catch (InterruptedException e) {
+//								// TODO Auto-generated catch block
+//								e.printStackTrace();
+//							}
+//			            }
+			            
+			        }
+					
+				}
+				
+			}, "thread"+i);
+        	threads[i] = thread;
         }
+        
+        for(int i=0;i<5000;i++) {
+        	threads[i].start();
+        }
+        
+        Thread.sleep(1000*60);
 
+        for(int i=0;i<5000;i++) {
+        	threads[i].stop();
+        }
         producer.shutdown();
     }
+    
 }

@@ -742,5 +742,10 @@ public class BrokerController {
     public BlockingQueue<Runnable> getSendThreadPoolQueue() {
         return sendThreadPoolQueue;
     }
+    
+    public static void main(String[] args) {
+    	String k = "Hello RocketMQ ";
+    	System.out.println(k.getBytes().length);
+    }
 
 }

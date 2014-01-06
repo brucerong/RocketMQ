@@ -314,6 +314,20 @@ public class TopicConfigManager extends ConfigManager {
             }
         }
     }
+    
+    
+    public static void main(String[] args) {
+    	TopicConfigSerializeWrapper topicConfigSerializeWrapper = new TopicConfigSerializeWrapper();
+    	ConcurrentHashMap<String, TopicConfig> topicConfigTable =
+            new ConcurrentHashMap<String, TopicConfig>();
+    	DataVersion dataVersion = new DataVersion();
+    	TopicConfig config = new TopicConfig();
+    	config.setTopicName("guanghao");
+    	topicConfigTable.put("guanghao", config);
+    	topicConfigSerializeWrapper.setTopicConfigTable(topicConfigTable);
+    	topicConfigSerializeWrapper.setDataVersion(dataVersion);
+    	System.out.println(topicConfigSerializeWrapper.toJson());
+    }
 
 
     private void printLoadDataWhenFirstBoot(final TopicConfigSerializeWrapper tcs) {
