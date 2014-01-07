@@ -27,6 +27,7 @@ import com.alibaba.rocketmq.common.message.Message;
  */
 public class Producer {
     public static void main(String[] args) throws MQClientException, InterruptedException {
+    	final String msgStr = "Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ r";
         final DefaultMQProducer producer = new DefaultMQProducer("hahaha");
         producer.setNamesrvAddr("10.125.13.150:9876");
         producer.start();
@@ -45,9 +46,10 @@ public class Producer {
 			            			long timetime1 = System.currentTimeMillis();
 				            		Message msg = new Message("guanghao",// topic
 						                    "TagA",// tag
-						                    ("Hello RocketMQ " + i).getBytes()// body
+						                    (msgStr + i).getBytes()// body
 						                        );
-//						            msg.setDelayTime(10000);
+						            msg.setDelayTime(10000);
+//				            		msg.setDelayTimeLevel(1);
 						            SendResult sendResult = producer.send(msg);
 			            			long timetime2 = System.currentTimeMillis();
 						            System.out.println((timetime2-timetime1)+"ms--"+sendResult);
