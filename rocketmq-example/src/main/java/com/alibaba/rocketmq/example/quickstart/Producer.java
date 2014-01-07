@@ -48,8 +48,8 @@ public class Producer {
 						                    "TagA",// tag
 						                    (msgStr + i).getBytes()// body
 						                        );
-						            msg.setDelayTime(10000);
-//				            		msg.setDelayTimeLevel(1);
+//						            msg.setDelayTime(10000);
+				            		msg.setDelayTimeLevel(1);
 						            SendResult sendResult = producer.send(msg);
 			            			long timetime2 = System.currentTimeMillis();
 						            System.out.println((timetime2-timetime1)+"ms--"+sendResult);
