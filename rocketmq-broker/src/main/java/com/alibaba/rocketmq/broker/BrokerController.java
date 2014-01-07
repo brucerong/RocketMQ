@@ -744,7 +744,7 @@ public class BrokerController {
     }
     
     public static void main(String[] args) {
-    	String k = "Hello RocketMQ ";
+    	String k = "Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ Hello RocketMQ r";
     	System.out.println(k.getBytes().length);
     }
 

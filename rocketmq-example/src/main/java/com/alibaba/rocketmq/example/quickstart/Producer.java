@@ -46,7 +46,7 @@ public class Producer {
 			            			long timetime1 = System.currentTimeMillis();
 				            		Message msg = new Message("guanghao",// topic
 						                    "TagA",// tag
-						                    (msgStr + i).getBytes()// body
+						                    ("Hello RocketMQ " + i).getBytes()// body
 						                        );
 //						            msg.setDelayTime(10000);
 				            		msg.setDelayTimeLevel(1);
